@@ -1,0 +1,15 @@
+#!/bin/bash
+
+clear
+
+cd src/connector_image
+
+connector_repository_name=$(find -mindepth 1 -maxdepth 1 -type d)
+
+rm docker-compose.yml run WORKSPACE
+rm -rf $connector_repository_name
+
+cd ../bazel_generate_files/generated
+
+rm -rf *
+touch BUILD docker-compose.yml run WORKSPACE

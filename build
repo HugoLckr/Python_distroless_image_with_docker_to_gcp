@@ -1,0 +1,177 @@
+#!/bin/bash
+
+clear
+cd src
+echo "machine bitbucket.org" > .netrc
+echo "login jenkins" >> .netrc
+echo "password efHadfonkAk6" >> .netrc
+echo "protocol https" >> .netrc
+cp .netrc ~/.
+cd ..
+##################################################################
+########Check that Docker and Docker-compose are installed########
+##################################################################
+tmp=$(docker -v)
+ret=$(echo $?)
+if [[ $ret != "0" ]]; then
+    echo "Please install Docker. (https://docs.docker.com/install/linux/docker-ce/ubuntu/)"
+    exit 0
+fi
+
+tmp=$(docker-compose -v)
+ret=$(echo $?)
+if [[ $ret != "0" ]]; then
+    echo "Please install Docker-compose. (https://docs.docker.com/compose/install/)"
+    exit 0
+fi
+
+clear
+set -e
+######################################
+########Ask for repository url########
+######################################
+cd src/connector_image
+loop=true
+regex="^https://bitbucket.org/+[0-9a-z_]+/[a-z_]+(/)?$"
+while ($loop); do
+    echo "Repository url : (Syntax: https://bitbucket.org/.../.../)"
+    echo -n "url :"
+    read answer
+    if [[ $answer =~ $regex ]]; then
+        clear
+        loop=false
+    else
+        clear
+        echo "Bad url syntax !"
+    fi
+done
+repository_url=$answer
+git clone $repository_url
+clear
+###########################################
+########Get Repository Name and Tag########
+###########################################
+connector_repository_name=$(find -mindepth 1 -maxdepth 1 -type d)
+connector_repository_name=${connector_repository_name#??}
+cd $connector_repository_name
+echo "repository_name=$connector_repository_name" > bazel.env
+if [[ $EUID -ne 0 ]]; then
+    echo "image_tag=$(sudo make show_version)" >> bazel.env
+else
+    echo "image_tag=$(make show_version)" >> bazel.env
+fi
+########################################
+########Ask For Environment file########
+########################################
+loop=true
+while ($loop); do
+    echo "Choose the connector env file :"
+    path_to_env_file=$(find -type f -name "*.env")
+    i=1
+    for file in $path_to_env_file
+    do
+        echo $i") "${file#??}
+        path_to_env_file[$i-1]=$file
+        let "i=i+1"
+    done
+    echo -n "Answer :"
+    read answer
+    if (( "$answer" >= "$i" )) || (( "$answer" < "1" ))
+    then
+        clear
+        let "i=i-1"
+        echo "The answer should be between 1 and ${i-1}"
+    else
+        clear
+        loop=false
+    fi
+done
+path_to_env_file="${path_to_env_file[answer-1]#??}"
+echo "path_to_env_file=$path_to_env_file" >> bazel.env
+###############################################
+########Ask For Connector Main Location########
+###############################################
+loop=true
+while ($loop); do
+    echo "Choose the connector main :"
+    python_files=$(find -type f -name "*.py")
+    i=1
+    for file in $python_files
+    do
+        echo $i") "${file#??}
+        python_files[$i-1]=$file
+        let "i=i+1"
+    done
+    echo -n "Answer :"
+    read answer
+    if (( "$answer" >= "$i" )) || (( "$answer" < "1" ))
+    then
+        clear
+        let "i=i-1"
+        echo "The answer should be between 1 and ${i-1}"
+    else
+        clear
+        loop=false
+    fi
+done
+path_to_connector_main="${python_files[answer-1]#??}"
+################################
+####Get path to python files####
+################################
+stop=0
+for ((i = 0; i <= ${#path_to_connector_main} && stop == 0; i++)); do
+    tmp=${path_to_connector_main: -i}
+    if [ ${tmp:0:1} = "/" ]
+    then
+        stop=1
+    else
+        python_main=$tmp
+    fi
+done
+path_to_pythons_files=${path_to_connector_main%"/$python_main"}
+echo "path_to_pythons_files=$path_to_pythons_files" >> bazel.env
+echo "python_main=$python_main" >> bazel.env
+########################################
+#######Ask for requirements file########
+########################################
+loop=true
+while ($loop); do
+    echo "Choose the requirement file :"
+    txt_files=$(find -type f -name "*.txt")
+    i=1
+    for file in $txt_files
+    do
+        echo $i") "${file#??}
+        txt_files[$i-1]=$file
+        let "i=i+1"
+    done
+    echo -n "Answer :"
+    read answer
+    if (( "$answer" >= "$i" )) || (( "$answer" < "1" ))
+    then
+        clear
+        let "i=i-1"
+        echo "The answer should be between 1 and ${i-1}"
+    else
+        clear
+        loop=false
+    fi
+done
+path_to_requirements="${txt_files[answer-1]#??}"
+echo "path_to_requirements.txt=$path_to_requirements" >> bazel.env
+#####################
+########Build########
+#####################
+cd ../../bazel_generate_files
+./main.py
+cd ..
+echo "machine bitbucket.org" > .netrc
+echo "login jenkins" >> .netrc
+echo "password efHadfonkAk6" >> .netrc
+if [[ $EUID -ne 0 ]]; then
+    sudo docker-compose up
+    sudo docker rmi create_python_bazel_image:1.0 --force
+else
+    docker-compose up
+    docker rmi create_python_bazel_image:1.0 --force
+fi

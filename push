@@ -1,0 +1,114 @@
+#!/bin/bash
+
+clear
+if [[ $EUID -ne 0 ]]; then
+    echo "Good"
+else
+    echo "Do not run as root !"
+    exit 0
+fi
+
+##########################################################################
+########Check that Docker, Docker-compose and Gcloud are installed########
+##########################################################################
+clear
+tmp=$(docker -v)
+ret=$(echo $?)
+if [[ $ret != "0" ]]; then
+    echo "Please install Docker. (https://docs.docker.com/install/linux/docker-ce/ubuntu/)"
+fi
+
+tmp=$(docker-compose -v)
+ret=$(echo $?)
+if [[ $ret != "0" ]]; then
+    echo "Please install Docker-compose. (https://docs.docker.com/compose/install/)"
+fi
+
+tmp=$(gcloud -v)
+ret=$(echo $?)
+if [[ $ret != "0" ]]; then
+    echo "Please install Gcloud. (https://cloud.google.com/sdk/docs/quickstart-debian-ubuntu)"
+fi
+
+clear
+set -e
+#####################################################
+########Get connector_repository_name and tag########
+#####################################################
+cd src/connector_image
+connector_repository_name=$(find -mindepth 1 -maxdepth 1 -type d)
+connector_repository_name=${connector_repository_name#??}
+cd $connector_repository_name
+image_tag=$(sudo make show_version)
+
+####################################
+########Ask for the Hostname########
+####################################
+loop=true
+while ($loop); do
+    echo "Hostname ?"
+    echo "1) eu.gcr.io"
+    echo "2) us.gcr.io"
+    echo "3) asia.gcr.io"
+    echo "4) gcr.io"
+    echo -n "Answer: "
+    read answer
+
+    if (( $answer == 1 )); then
+        loop=false
+        hostname="eu.gcr.io"
+    elif (( $answer == 2 )); then
+        loop=false
+        hostname="us.gcr.io"
+    elif (( $answer == 3 )) ; then
+        loop=false
+        hostname="asia.gcr.io"
+    elif (( $answer == 4 )) ; then
+        loop=false
+        hostname="gcr.io"
+    else
+        clear
+        echo "The answer should be between 1 and 4"
+    fi
+done
+clear
+
+##################################
+########Ask for project-id########
+##################################
+loop=true
+echo "Project-id ? (example: engineering-test-197116)"
+echo -n "project-id: "
+read project_id
+clear
+
+################################
+########Authentification########
+################################
+loop=true
+while ($loop); do
+    echo "Do you want to push using json key authentification ? y/n"
+    read answer
+    if [ "$answer" == "y" ] || [ "$answer" == "yes" ]; then
+        clear
+        loop=false
+        echo "Path to json file :"
+        echo -n "->"
+        read path_to_json_file
+        cat $path_to_json_file | docker login -u _json_key --password-stdin https://$hostname
+    elif [ "$answer" == "n" ] || [ "$answer" == "no" ]; then
+        clear
+        loop=false
+        gcloud auth login
+    else
+        clear
+        echo "Please answer y/n or yes/no."
+    fi
+done
+clear
+
+############################
+########Tag and push########
+############################
+sudo docker tag bazel/$connector_repository_name:$image_tag $hostname/$project_id/bazel/$connector_repository_name:$image_tag
+sudo docker push $hostname/$project_id/bazel/$connector_repository_name:$image_tag

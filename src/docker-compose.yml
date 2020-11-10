@@ -1,0 +1,9 @@
+version: "3"
+services:
+  create_bazel_image:
+    image: create_python_bazel_image:1.0
+    container_name: create_python_bazel_image
+    build: .
+    volumes:
+      - "./connector_image/:/opt/mb/connector_image:ro"
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"

@@ -1,0 +1,29 @@
+load("@io_bazel_rules_docker//python:image.bzl", "py_image")
+load("@my_deps//:requirements.bzl", "requirement")
+load("@io_bazel_rules_docker//container:container.bzl", "container_image")
+
+
+py_library(
+    name = "mylib",
+    deps = [
+        $[ADD_REQUIREMENTS]$
+    ]
+)
+
+py_image(
+    name = "$[py_image_name]$",
+    srcs = glob($["py_src/*.py"]$),
+    main = "$[py_main]$",
+    deps = [
+        ":mylib",
+    ],
+    data = glob($["py_src/**"]$),
+)
+
+container_image(
+    name = "$[container_image_name]$",
+    base = "$[base_name]$",
+    env = {
+        "PATH": "",
+    }
+)
